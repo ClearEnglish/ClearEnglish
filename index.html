@@ -59,26 +59,29 @@
         // --- FIREBASE IMPORTS ---
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged, signInAnonymously, updateProfile } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-       
+        import { getFirestore, doc, setDoc, getDoc, addDoc, onSnapshot, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
         const { useState, useEffect, useRef } = React;
 
         // -----------------------------------------------------------
-        // ⚠️ IMPORTANTE PARA GITHUB: PEGA TU CONFIG DE FIREBASE AQUÍ ⚠️
-        // Si lo dejas vacío, la app funcionará en "Modo Demo" (sin Google real).
+        // ⚠️ CONFIGURACIÓN FIREBASE ⚠️
         // -----------------------------------------------------------
         const firebaseConfigOverride = {
-            // apiKey: "TU_API_KEY",
-            // authDomain: "TU_DOMINIO.firebaseapp.com",
-            // projectId: "TU_PROJECT_ID",
-            // ... etc
+            apiKey: "AIzaSyDh0Wx9fBWBOupNcSMjCzJoOp1m9y7eHus",
+            authDomain: "clear-english-updated.firebaseapp.com",
+            projectId: "clear-english-updated",
+            storageBucket: "clear-english-updated.firebasestorage.app",
+            messagingSenderId: "773933146391",
+            appId: "1:773933146391:web:b19ea50556f71205445752",
+            measurementId: "G-L3TMK07CV6"
         };
 
         // --- SAFE FIREBASE INITIALIZATION ---
-        let auth, provider;
+        let auth, provider, db;
         let isFirebaseActive = false;
+        const APP_ID = 'clear-english-pro'; // Identificador único para base de datos
 
         try {
-            // Priority: User config > Environment config > Empty
             const configToUse = Object.keys(firebaseConfigOverride).length > 0
                 ? firebaseConfigOverride
                 : (typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {});
@@ -86,10 +89,12 @@
             if (Object.keys(configToUse).length > 0 && configToUse.apiKey) {
                 const app = initializeApp(configToUse);
                 auth = getAuth(app);
+                db = getFirestore(app);
                 provider = new GoogleAuthProvider();
                 isFirebaseActive = true;
+                console.log("¡Firebase conectado correctamente! 🚀");
             } else {
-                console.warn("No Firebase config found. Running in Demo Mode.");
+                console.warn("No Firebase config found. Running in Demo Mode (Local Storage only).");
             }
         } catch (e) {
             console.error("Firebase init failed:", e);
@@ -115,7 +120,6 @@
         const TIME_PAST = ["yesterday", "last week", "in 2010", "two days ago", "last night"];
         const TIME_FUTURE = ["tomorrow", "next week", "soon", "later", "tonight"];
         const TIME_FREQ = ["usually", "always", "often", "every day", "sometimes"];
-        const BE_FORMS = { "I": "am", "You": "are", "He": "is", "She": "is", "It": "is", "We": "are", "They": "are", "The student": "is", "My friend": "is", "The teacher": "is", "The doctor": "is", "Everyone": "is", "Nobody": "is" };
         const VERBS_REGULAR = [
             { base: "play", ing: "playing", past: "played" }, { base: "work", ing: "working", past: "worked" }, { base: "live", ing: "living", past: "lived" },
             { base: "walk", ing: "walking", past: "walked" }, { base: "watch", ing: "watching", past: "watched" }, { base: "listen", ing: "listening", past: "listened" },
@@ -170,7 +174,6 @@
                 return v + 'ing';
             };
 
-            // Exercise logic (Condensed for brevity but functional)
             if (t.includes("past") || t.includes("irregular") || t.includes("did")) {
                 const verbs = getUniqueVerbs(VERBS_IRREGULAR, count);
                 verbs.forEach((v, i) => {
@@ -388,25 +391,29 @@
             );
         }
        
-        function LoginView() {
+        // --- AUTH & TEACHER DASHBOARD COMPONENTS ---
+       
+        function LoginView({ onBypassLogin }) {
             const handleGoogleLogin = async () => {
                 if (!auth) {
-                    alert("Firebase is not configured. Please add your credentials in the index.html file.");
+                    alert("⚠️ Firebase no configurado correctamente.\n\nEntrando en modo Demo...");
+                    if (onBypassLogin) onBypassLogin();
                     return;
                 }
                 try {
                     await signInWithPopup(auth, provider);
                 } catch (error) {
-                    console.warn("Google Sign-In failed or not authorized. Falling back to anonymous login.");
+                    console.warn("Google Sign-In failed. Intentando acceso anónimo...", error);
                     try {
                         const result = await signInAnonymously(auth);
                         await updateProfile(result.user, {
-                            displayName: "Demo User",
+                            displayName: "Usuario Demo",
                             photoURL: "https://ui-avatars.com/api/?name=Demo+User&background=random&color=fff"
                         });
                     } catch (fallbackError) {
                         console.error("Login completely failed", fallbackError);
-                        alert("Login failed. Please check your internet connection.");
+                        alert("⚠️ Error en Firebase (Por favor, asegúrate de haber activado el modo 'Anónimo' o 'Google' en Firebase Authentication).\n\nActivando Modo Demo local para que puedas probar la aplicación.");
+                        if (onBypassLogin) onBypassLogin();
                     }
                 }
             };
@@ -418,25 +425,29 @@
                             <Icon name="zap" size={40} className="text-white" />
                         </div>
                         <h1 className="text-4xl md:text-5xl font-black text-slate-800 mb-2">Clear English</h1>
-                        <p className="text-slate-400 font-bold mb-10">Sign in to start learning</p>
+                        <p className="text-slate-400 font-bold mb-10">Inicia sesión para continuar</p>
                        
                         <button onClick={handleGoogleLogin} className="w-full bg-white border-2 border-slate-100 p-4 rounded-2xl flex items-center justify-center gap-3 font-bold text-slate-700 hover:bg-slate-50 hover:border-blue-200 hover:scale-105 transition-all shadow-lg shadow-slate-200/50 group">
                             <svg className="w-6 h-6" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
                             Sign in with Google
+                        </button>
+
+                        <button onClick={() => onBypassLogin && onBypassLogin()} className="mt-8 text-sm font-bold text-slate-400 hover:text-slate-600 transition-colors underline">
+                            O continuar como Invitado (Modo Demo)
                         </button>
                     </div>
                 </div>
             );
         }
 
-        function AuthView({ onSelectRole }) {
+        function AuthView({ onSelectRole, currentUser, onLogout }) {
             return (
                 <div className="min-h-screen flex items-center justify-center p-4 animate-smooth-view">
                     <div className="glass-card p-12 rounded-[3rem] text-center max-w-2xl w-full relative">
                         <div className="absolute top-6 right-6 flex items-center gap-2 bg-white px-3 py-1 rounded-full shadow-sm border border-slate-100">
-                            {auth?.currentUser?.photoURL && <img src={auth.currentUser.photoURL} className="w-6 h-6 rounded-full" />}
-                            <span className="text-xs font-bold text-slate-500">{auth?.currentUser?.displayName}</span>
-                            <button onClick={() => auth?.signOut()} className="text-xs text-red-500 font-bold ml-2 hover:underline">Logout</button>
+                            {currentUser?.photoURL && <img src={currentUser.photoURL} className="w-6 h-6 rounded-full" />}
+                            <span className="text-xs font-bold text-slate-500">{currentUser?.displayName || "Usuario"}</span>
+                            <button onClick={onLogout} className="text-xs text-red-500 font-bold ml-2 hover:underline">Logout</button>
                         </div>
                        
                         <div className="mb-10">
@@ -505,12 +516,39 @@
            
             const allTopics = GRAMMAR_LIBRARY.flatMap(g => g.topics);
            
+            // --- CONEXIÓN REALTIME CON FIREBASE (O LOCALSTORAGE COMO BACKUP) ---
             useEffect(() => {
-                const savedResults = localStorage.getItem('class_results');
-                if (savedResults) {
-                    setClassResults(JSON.parse(savedResults));
+                if (activeTab === 'results') {
+                    if (db) {
+                        try {
+                            const resultsRef = collection(db, 'artifacts', APP_ID, 'public', 'data', 'results');
+                            const unsubscribe = onSnapshot(resultsRef, (snapshot) => {
+                                const allRes = snapshot.docs.map(d => d.data());
+                                // Filtramos solo si hay un código generado, o los mostramos todos
+                                const filteredRes = generatedCode ? allRes.filter(r => r.code === generatedCode) : allRes;
+                               
+                                // Ordenamos por fecha en memoria
+                                filteredRes.sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+                               
+                                setClassResults(filteredRes);
+                            }, (error) => {
+                                console.warn("Error leyendo Firestore, usando LocalStorage:", error);
+                                const savedResults = localStorage.getItem('class_results');
+                                if (savedResults) setClassResults(JSON.parse(savedResults));
+                            });
+                            return () => unsubscribe();
+                        } catch (e) {
+                             console.warn("Firestore error, fallback a local", e);
+                             const savedResults = localStorage.getItem('class_results');
+                             if (savedResults) setClassResults(JSON.parse(savedResults));
+                        }
+                    } else {
+                        // Fallback a LocalStorage si Firestore no está activo
+                        const savedResults = localStorage.getItem('class_results');
+                        if (savedResults) setClassResults(JSON.parse(savedResults));
+                    }
                 }
-            }, [activeTab]);
+            }, [activeTab, db, generatedCode]);
 
             const newResultsCount = classResults.length - lastSeenCount;
 
@@ -528,11 +566,28 @@
                 else setSelectedTopics(prev => [...prev, t]);
             };
            
-            const createParty = () => {
+            const createParty = async () => {
                 if(selectedTopics.length === 0) return;
                 const code = Math.random().toString(36).substring(2, 8).toUpperCase();
                 setGeneratedCode(code);
+               
+                // BACKUP LOCAL
                 localStorage.setItem(`fastparty_${code}`, JSON.stringify(selectedTopics));
+               
+                // HOST REAL EN FIREBASE (Se sube a la base de datos)
+                if (db) {
+                    try {
+                        const partyRef = doc(db, 'artifacts', APP_ID, 'public', 'data', 'parties', code);
+                        await setDoc(partyRef, {
+                            topics: selectedTopics,
+                            active: true,
+                            createdAt: Date.now()
+                        });
+                        console.log("¡Party alojada en Firestore correctamente con código:", code, "!");
+                    } catch (e) {
+                        console.warn("No se pudo alojar en Firestore, se utilizará LocalStorage. Para jugar entre distintos ordenadores, ajusta las Reglas de Firestore.", e);
+                    }
+                }
             };
 
             return (
@@ -597,8 +652,8 @@
                                    
                                     <div className="glass-card p-6 rounded-[2rem] flex-1 flex flex-col justify-center items-center text-center">
                                         <Icon name="users" size={48} className="text-slate-300 mb-4" />
-                                        <h3 className="font-bold text-slate-700 mb-2">Ready for Students</h3>
-                                        <p className="text-slate-400 text-sm max-w-xs">Once students finish the quiz using the code, their results will appear in the "Student Results" tab.</p>
+                                        <h3 className="font-bold text-slate-700 mb-2">Host Server Running</h3>
+                                        <p className="text-slate-400 text-sm max-w-xs">Students can join using the code above. Results will appear automatically in the "Student Results" tab.</p>
                                     </div>
                                 </div>
                             </div>
@@ -695,6 +750,7 @@
         // --- FAST PARTY HELPER (UPDATED) ---
         const generateFastPartyMix = (customTopics = null) => {
             let topicsToUse = [];
+           
             if (customTopics && customTopics.length > 0) {
                 topicsToUse = customTopics;
             } else {
@@ -704,11 +760,13 @@
                     if(!topicsToUse.includes(t)) topicsToUse.push(t);
                 }
             }
+
             let mixedExercises = [];
             topicsToUse.forEach(t => {
                 const data = generateGrammarExercises(t, 5);
                 mixedExercises = [...mixedExercises, ...data.exercises];
             });
+           
             return mixedExercises.sort(() => Math.random() - 0.5).slice(0, 10);
         };
 
@@ -727,29 +785,50 @@
             const [showVerbsList, setShowVerbsList] = useState(false);
             const [currentMistakes, setCurrentMistakes] = useState([]);
             const [selectedTest, setSelectedTest] = useState(null);
+           
             const [studentName, setStudentName] = useState('');
             const [teacherCode, setTeacherCode] = useState('');
             const [isFastParty, setIsFastParty] = useState(false);
             const [partyError, setPartyError] = useState('');
+           
             const [history, setHistory] = useState(() => {
                 try { const saved = localStorage.getItem('eng_history'); return saved ? JSON.parse(saved) : []; } catch(e){ return []; }
             });
 
+            // AUTH STATE LISTENER CON FALLBACK SEGURO
             useEffect(() => {
-                if(auth) {
+                if (auth) {
                     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-                        setUser(currentUser);
-                        if (currentUser && !studentName) {
-                            setStudentName(currentUser.displayName || "");
+                        if (currentUser) {
+                            setUser(currentUser);
+                            if (currentUser.displayName) {
+                                // AUTOCOMPLETADO DE NOMBRE SIEMPRE ACTIVO PARA USUARIOS REALES
+                                setStudentName(currentUser.displayName);
+                            }
+                        } else {
+                            setUser((prevUser) => prevUser?.isDemo ? prevUser : null);
                         }
                     });
                     return () => unsubscribe();
                 } else {
-                    // DEMO MODE AUTO-LOGIN
-                    setUser({ displayName: "Demo User", photoURL: null });
-                    setStudentName("Demo User");
+                    setUser({ displayName: "Usuario Demo", photoURL: null, isDemo: true });
+                    setStudentName("Usuario Demo");
                 }
             }, []);
+
+            const handleManualLogout = async () => {
+                if (auth && user && !user.isDemo) {
+                    await signOut(auth);
+                }
+                setUser(null);
+                setUserRole('none');
+                setStudentName('');
+            };
+
+            const handleBypassLogin = () => {
+                setUser({ displayName: "Usuario Demo", photoURL: null, isDemo: true });
+                setStudentName("Usuario Demo");
+            };
 
             const saveResult = (topic, score, total, mistakes) => {
                 const newRecord = { id: Date.now(), date: new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}), topic, score, total, mistakes: mistakes || [] };
@@ -766,30 +845,55 @@
                 }
             };
            
-            const handleFastPartyStart = () => {
+            const handleFastPartyStart = async () => {
                 if (!studentName || !teacherCode) return;
                 setPartyError('');
-                const storedConfig = localStorage.getItem(`fastparty_${teacherCode.trim().toUpperCase()}`);
+               
+                const cleanCode = teacherCode.trim().toUpperCase();
                 let mix = [];
-                if (storedConfig) {
+                let partyFound = false;
+
+                // INTENTO 1: Buscar party en la NUBE (Firestore)
+                if (db) {
                     try {
-                        const topics = JSON.parse(storedConfig);
-                        mix = generateFastPartyMix(topics);
-                        setCurrentTopic(`Fast Party (${teacherCode})`);
+                        const partyRef = doc(db, 'artifacts', APP_ID, 'public', 'data', 'parties', cleanCode);
+                        const partySnap = await getDoc(partyRef);
+                       
+                        if (partySnap.exists()) {
+                            const topics = partySnap.data().topics;
+                            mix = generateFastPartyMix(topics);
+                            partyFound = true;
+                        }
                     } catch (e) {
-                        setPartyError("Invalid Code Configuration.");
-                        return;
+                        console.warn("Error leyendo Firestore, intentando modo local...", e);
                     }
-                } else {
-                    setPartyError("Code not found. Please ask your teacher.");
-                    return;
                 }
-                setIsFastParty(true);
-                setExercises(mix);
-                setQIndex(0);
-                setScore(0);
-                setCurrentMistakes([]);
-                setView('practice');
+
+                // INTENTO 2: Buscar party en LOCAL (Si Firestore falló o no existe el código en la nube)
+                if (!partyFound) {
+                    const storedConfig = localStorage.getItem(`fastparty_${cleanCode}`);
+                    if (storedConfig) {
+                        try {
+                            const topics = JSON.parse(storedConfig);
+                            mix = generateFastPartyMix(topics);
+                            partyFound = true;
+                        } catch (e) {
+                            console.error(e);
+                        }
+                    }
+                }
+
+                if (partyFound) {
+                    setCurrentTopic(`Fast Party (${cleanCode})`);
+                    setIsFastParty(true);
+                    setExercises(mix);
+                    setQIndex(0);
+                    setScore(0);
+                    setCurrentMistakes([]);
+                    setView('practice');
+                } else {
+                    setPartyError("Código no encontrado. Revisa si el profesor lo creó correctamente.");
+                }
             };
 
             const handleTopicSelect = (topicName) => {
@@ -817,10 +921,11 @@
                 setView('practice');
             };
            
+            // --- AUTH RENDER LOGIC ---
             if (!user) {
                 return (
                     <div className="min-h-screen font-sans text-slate-900 bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 selection:bg-indigo-200">
-                        <LoginView />
+                        <LoginView onBypassLogin={handleBypassLogin} />
                     </div>
                 );
             }
@@ -828,7 +933,7 @@
             if (userRole === 'none') {
                 return (
                     <div className="min-h-screen font-sans text-slate-900 bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 selection:bg-indigo-200">
-                        <AuthView onSelectRole={(role) => setUserRole(role)} />
+                        <AuthView onSelectRole={(role) => setUserRole(role)} currentUser={user} onLogout={handleManualLogout} />
                     </div>
                 );
             }
@@ -849,6 +954,7 @@
                 );
             }
 
+            // --- STUDENT APP ---
             const totalScore = history.reduce((acc, curr) => acc + curr.score, 0);
             const totalPossible = history.reduce((acc, curr) => acc + curr.total, 0);
             const avgPercentage = totalPossible > 0 ? Math.round((totalScore / totalPossible) * 100) : 0;
@@ -874,7 +980,7 @@
                                 <button onClick={() => handleModeChange('stats')} className={`px-4 py-2 rounded-xl transition-all whitespace-nowrap flex items-center gap-1 ${appMode === 'stats' ? 'bg-emerald-100 text-emerald-700' : 'hover:bg-slate-100'}`}><Icon name="bar-chart-3" size={16} /> Stats</button>
                                
                                 <div className="ml-2 flex items-center gap-2 bg-white pl-1 pr-3 py-1 rounded-full border border-slate-100 shadow-sm">
-                                    {user.photoURL ? <img src={user.photoURL} className="w-6 h-6 rounded-full" /> : <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-xs">{user.displayName?.[0]}</div>}
+                                    {user.photoURL ? <img src={user.photoURL} className="w-6 h-6 rounded-full" /> : <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-xs">{user.displayName?.[0] || 'U'}</div>}
                                     <button onClick={() => setUserRole('none')} className="text-slate-400 hover:text-slate-600" title="Switch Role"><Icon name="users" size={16} /></button>
                                 </div>
                             </div>
@@ -1029,30 +1135,39 @@
                                     <PracticeView
                                         key={exercises[qIndex] ? exercises[qIndex].id : 'loading'}
                                         exercise={exercises[qIndex]}
-                                        onAnswer={(isCorrect, answerData) => {
+                                        onAnswer={async (isCorrect, answerData) => {
                                             if (!isCorrect) { setCurrentMistakes(prev => [...prev, { ...exercises[qIndex], userAnswer: answerData }]); } else { setScore(s => s + 1); }
                                             if(qIndex + 1 < exercises.length) { setQIndex(i => i + 1); }
                                             else {
                                                 const finalMistakes = !isCorrect ? [...currentMistakes, { ...exercises[qIndex], userAnswer: answerData }] : currentMistakes;
                                                 if (isFastParty) {
-                                                    // SAVE RESULT FOR TEACHER VIEW
                                                     const resultData = {
                                                         name: studentName,
                                                         score: score + (isCorrect ? 1 : 0),
                                                         total: exercises.length,
-                                                        code: teacherCode,
+                                                        code: teacherCode.toUpperCase(),
                                                         date: new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
-                                                        mistakes: finalMistakes // Added mistakes here
+                                                        mistakes: finalMistakes,
+                                                        timestamp: Date.now()
                                                     };
+                                                   
+                                                    // ENVIAR RESULTADO A FIREBASE (Para que el profe lo vea en tiempo real)
+                                                    if (db) {
+                                                        try {
+                                                            await addDoc(collection(db, 'artifacts', APP_ID, 'public', 'data', 'results'), resultData);
+                                                        } catch(e) {
+                                                            console.warn("Fallo enviando a Firestore. Usando LocalStorage...", e);
+                                                        }
+                                                    }
+                                                   
+                                                    // BACKUP LOCAL
                                                     const currentResults = JSON.parse(localStorage.getItem('class_results') || '[]');
                                                     localStorage.setItem('class_results', JSON.stringify([resultData, ...currentResults]));
 
-                                                    // Fast Party Completion Logic
-                                                    alert(`Great job ${studentName}! 🎉\n\nYour score of ${score + (isCorrect ? 1 : 0)}/${exercises.length} has been successfully sent to Teacher Code: ${teacherCode}.`);
+                                                    alert(`¡Buen trabajo ${studentName}! 🎉\n\nTu puntuación de ${score + (isCorrect ? 1 : 0)}/${exercises.length} ha sido enviada al profesor.`);
                                                     setView('landing');
                                                     setIsFastParty(false);
                                                 } else {
-                                                    // Regular Practice Completion
                                                     saveResult(currentTopic, score + (isCorrect ? 1 : 0), exercises.length, finalMistakes);
                                                     setTimeout(() => { setShowConfetti(true); setTimeout(() => setShowConfetti(false), 3000); setView('stats'); }, 500);
                                                 }
